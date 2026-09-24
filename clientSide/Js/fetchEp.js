@@ -1,6 +1,8 @@
 const area = document.getElementById('episodeListingArea');
 const area2 = document.getElementById('episodeListingArea2');
 const area3 = document.getElementById('episodeListingArea3');
+const seasonDataCache = new Map();
+const seasonRequests = new Map();
 
 function createEpisodeCard(ep) {
     const displayEp = document.createElement('div');
@@ -33,19 +35,39 @@ function renderEpisodeCards(container, data) {
     container.appendChild(fragment);
 }
 
-async function fetchSeasonData(url, renderCallback) {
-    try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            throw new Error(`Request failed with status ${response.status}`);
-        }
-
-        const data = await response.json();
-        renderCallback(Array.isArray(data.episodes) ? data.episodes : []);
-    } catch (error) {
-        console.error(error.message);
+function loadSeasonData(url) {
+    if (seasonDataCache.has(url)) {
+        return Promise.resolve(seasonDataCache.get(url));
     }
+
+    if (!seasonRequests.has(url)) {
+        const request = fetch(url)
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                return response.json();
+            })
+            .then((data) => {
+                const episodes = Array.isArray(data.episodes) ? data.episodes : [];
+                seasonDataCache.set(url, episodes);
+                return episodes;
+            })
+            .finally(() => seasonRequests.delete(url));
+
+        seasonRequests.set(url, request);
+    }
+
+    return seasonRequests.get(url);
+}
+
+function fetchSeasonData(url, renderCallback) {
+    return loadSeasonData(url)
+        .then(renderCallback)
+        .catch((error) => {
+            console.error(error.message);
+        });
 }
 
 function fetchEp() {
